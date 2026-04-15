@@ -1,0 +1,6 @@
+- [x] grep
+- [x] switch between repos
+- [x] better repl:
+  - [x] use std/rdstdin, and 
+  - [x] tab for complete, with directory cache for faster repeated completion
+- [x] find (find repos)

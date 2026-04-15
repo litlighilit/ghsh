@@ -50,3 +50,28 @@ suite "ghsh core":
     check config.repoSlug == "nim-lang/Nim"
     check config.command == ckLs
     check config.argument == "lib"
+
+  test "parse CLI find command with multi-word query":
+    let config = parseCli(@["nim-lang/Nim", "find", "shell", "tooling"])
+    check config.command == ckFind
+    check config.argument == "shell tooling"
+
+  test "parse CLI grep command":
+    let config = parseCli(@["nim-lang/Nim", "grep", "proc", "initSession"])
+    check config.command == ckGrep
+    check config.argument == "proc initSession"
+
+  test "parse CLI less command":
+    let config = parseCli(@["nim-lang/Nim", "less", "README.md"])
+    check config.command == ckLess
+    check config.argument == "README.md"
+
+  test "parse CLI less command with spaced path":
+    let config = parseCli(@["nim-lang/Nim", "less", "docs", "user guide.md"])
+    check config.command == ckLess
+    check config.argument == "docs user guide.md"
+
+  test "parse CLI switch command":
+    let config = parseCli(@["nim-lang/Nim", "switch", "tree-sitter/tree-sitter"])
+    check config.command == ckSwitch
+    check config.argument == "tree-sitter/tree-sitter"
