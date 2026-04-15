@@ -1,5 +1,21 @@
 import std/[base64, httpclient, json, strutils, uri]
 
+const
+  GithubApiBase = "https://api.github.com/repos/"
+  GithubContentsPath = "/contents"
+  GithubAcceptHeader = "application/vnd.github+json"
+  GithubUserAgent = "ghsh"
+  GithubEncodingBase64 = "base64"
+  RepoPathSeparatorStr = "/"
+  RepoPathSeparator = '/'
+  LocalPathSeparator = '\\'
+  ParentPathSegment = ".."
+  CurrentPathSegment = "."
+  FileKind = "file"
+  DirectoryKind = "dir"
+  SymlinkKind = "symlink"
+  SubmoduleKind = "submodule"
+
 type
   EntryKind* = enum
     ekFile,
@@ -33,18 +49,18 @@ proc parseRepoSlug*(slug: string): tuple[owner: string, repo: string] =
 
 proc normalizeRepoPath*(rawPath: string): string =
   var parts: seq[string] = @[]
-  let normalizedSlashes = rawPath.replace('\\', '/')
+  let normalizedSlashes = rawPath.replace(LocalPathSeparator, RepoPathSeparator)
 
-  for part in normalizedSlashes.split('/'):
-    if part.len == 0 or part == ".":
+  for part in normalizedSlashes.split(RepoPathSeparator):
+    if part.len == 0 or part == CurrentPathSegment:
       continue
-    if part == "..":
+    if part == ParentPathSegment:
       if parts.len > 0:
         discard parts.pop()
       continue
     parts.add(part)
 
-  result = parts.join("/")
+  result = parts.join(RepoPathSeparatorStr)
 
 proc resolveRepoPath*(cwd: string, userPath: string): string =
   let cleanedCwd = normalizeRepoPath(cwd)
@@ -65,10 +81,14 @@ proc initSession*(repoSlug: string, gitRef = "HEAD", token = ""): GhShSession =
 
 proc entryKindFromApi(kind: string): EntryKind =
   case kind
-  of "file": ekFile
-  of "dir": ekDir
-  of "symlink": ekSymlink
-  of "submodule": ekSubmodule
+  of FileKind:
+    ekFile
+  of DirectoryKind:
+    ekDir
+  of SymlinkKind:
+    ekSymlink
+  of SubmoduleKind:
+    ekSubmodule
   else: ekUnknown
 
 proc encodePathSegments(path: string): string =
@@ -77,15 +97,15 @@ proc encodePathSegments(path: string): string =
     return ""
 
   var encoded: seq[string] = @[]
-  for segment in cleaned.split('/'):
+  for segment in cleaned.split(RepoPathSeparator):
     encoded.add(encodeUrl(segment))
-  result = encoded.join("/")
+  result = encoded.join(RepoPathSeparatorStr)
 
 proc buildContentsUrl(session: GhShSession, path: string): string =
   let encodedPath = encodePathSegments(path)
-  var base = "https://api.github.com/repos/" & session.owner & "/" & session.repo & "/contents"
+  var base = GithubApiBase & session.owner & "/" & session.repo & GithubContentsPath
   if encodedPath.len > 0:
-    base &= "/" & encodedPath
+    base &= RepoPathSeparatorStr & encodedPath
   if session.gitRef.len > 0:
     base &= "?ref=" & encodeUrl(session.gitRef)
   result = base
@@ -93,8 +113,8 @@ proc buildContentsUrl(session: GhShSession, path: string): string =
 proc requestJson(url: string, token: string): JsonNode =
   var client = newHttpClient()
   client.headers = newHttpHeaders({
-    "User-Agent": "ghsh",
-    "Accept": "application/vnd.github+json"
+    "User-Agent": GithubUserAgent,
+    "Accept": GithubAcceptHeader
   })
 
   if token.len > 0:
@@ -128,22 +148,26 @@ proc readFileText*(session: GhShSession, userPath: string): string =
     raise newException(ValueError, "path is not a file: /" & absolutePath)
 
   let itemType = payload{"type"}.getStr()
-  if itemType != "file":
+  if itemType != FileKind:
     raise newException(ValueError, "path is not a regular file: /" & absolutePath)
 
   let encoding = payload{"encoding"}.getStr()
-  if encoding != "base64":
+  if encoding != GithubEncodingBase64:
     raise newException(ValueError, "unsupported file encoding: " & encoding)
 
   let encodedContent = payload{"content"}.getStr().replace("\n", "")
   result = decode(encodedContent)
 
 proc pathExistsAsDirectory*(session: GhShSession, userPath: string): bool =
+  let absolutePath = resolveRepoPath(session.cwd, userPath)
   try:
-    discard listDirectory(session, userPath)
-    true
-  except CatchableError:
-    false
+    result = requestJson(buildContentsUrl(session, absolutePath), session.token).kind == JArray
+  except HttpRequestError:
+    return false
+  except JsonParsingError:
+    return false
+  except ValueError:
+    return false
 
 proc changeDirectory*(session: var GhShSession, userPath: string): bool =
   let destination = resolveRepoPath(session.cwd, userPath)

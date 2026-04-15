@@ -1,5 +1,6 @@
 import unittest
 import std/strutils
+import ghsh/cli
 import ghsh/submodule
 
 suite "ghsh core":
@@ -34,3 +35,18 @@ suite "ghsh core":
     check session.repo == "Nim"
     check session.gitRef == "HEAD"
     check session.cwd == ""
+
+  test "parse CLI defaults to repl":
+    let config = parseCli(@["nim-lang/Nim"])
+    check config.repoSlug == "nim-lang/Nim"
+    check config.command == ckRepl
+    check config.argument == ""
+    check config.gitRef == "HEAD"
+
+  test "parse CLI command and options":
+    let config = parseCli(@["--ref=main", "--token=secret", "nim-lang/Nim", "ls", "lib"])
+    check config.gitRef == "main"
+    check config.token == "secret"
+    check config.repoSlug == "nim-lang/Nim"
+    check config.command == ckLs
+    check config.argument == "lib"
