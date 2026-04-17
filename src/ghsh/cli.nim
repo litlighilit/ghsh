@@ -1,4 +1,4 @@
-import std/[algorithm, httpclient, json, os, osproc, parseopt, rdstdin, strutils, tables, tempfiles]
+import std/[algorithm, httpclient, json, logging, os, osproc, parseopt, rdstdin, strutils, tables, tempfiles]
 
 when not defined(windows):
   import std/linenoise
@@ -83,8 +83,16 @@ when not defined(windows):
   var gCompletionCache: ptr ReplCache
   var gHistoryPath: string
 
+var gLoggerInitialized = false
+
 proc printUsage*() =
   echo UsageText
+
+proc ensureLoggerInitialized() =
+  if gLoggerInitialized:
+    return
+  addHandler(newConsoleLogger(fmtStr = "$msg"))
+  gLoggerInitialized = true
 
 proc parseCommandKind(commandName: string): CommandKind =
   case commandName.toLowerAscii()
@@ -345,7 +353,7 @@ proc runLess(session: GhShSession, pathArg: string) =
       close(pager)
   except OSError as exc:
     if pagerCommand != defaultPagerCommand():
-      stderr.writeLine(ErrorPrefix & "failed to launch pager from " & PagerEnvVar & ": " & exc.msg)
+      error ErrorPrefix & "failed to launch pager from " & PagerEnvVar & ": " & exc.msg
     runBuiltinPager(text)
   finally:
     try:
@@ -479,7 +487,7 @@ proc runRepl(session: var GhShSession) =
       of CommandCd:
         let target = if arg.len == 0: RootPath else: arg
         if not changeDirectory(session, target):
-          stderr.writeLine(ErrorPrefix & "directory not found: " & target)
+          warn ErrorPrefix & "directory not found: " & target
         else:
           cache.directoryEntries.clear()
       of CommandCat:
@@ -495,13 +503,13 @@ proc runRepl(session: var GhShSession) =
       of "exit", "quit":
         break
       else:
-        stderr.writeLine(ErrorPrefix & "unknown command: " & command)
+        warn ErrorPrefix & "unknown command: " & command
   finally:
     when not defined(windows):
       saveReplHistory()
 
 proc reportError(message: string) =
-  stderr.writeLine(ErrorPrefix & message)
+  error ErrorPrefix & message
 
 proc runCommand(config: CliConfig) =
   var session = initSession(config.repoSlug, config.gitRef, config.token)
@@ -526,6 +534,7 @@ proc runCommand(config: CliConfig) =
     runSwitch(session, cache, config.argument)
 
 proc runCli*(argv: seq[string]) =
+  ensureLoggerInitialized()
   try:
     runCommand(parseCli(argv))
   except ValueError as exc:

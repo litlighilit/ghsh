@@ -1,4 +1,4 @@
-import std/[base64, httpclient, json, sets, strutils, uri]
+import std/[base64, httpclient, json, logging, sets, strutils, uri]
 
 const
   GithubApiBase = "https://api.github.com/repos/"
@@ -284,7 +284,7 @@ proc grepRepository*(session: GhShSession, pattern: string, maxMatches = 100): s
     if not shouldFallbackFromCodeSearch(exc.msg):
       raise
 
-    stderr.writeLine(CodeSearchAuthHint)
+    error CodeSearchAuthHint
     var files: seq[string] = @[]
     collectFilePaths(session, "", files)
     result = collectGrepMatches(session, files, needle, maxMatches)
