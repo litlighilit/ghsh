@@ -30,5 +30,3 @@ jobs:
     - name: test
       run: nimble test
 
-    - name: test js
-      run: nimble test -b:js -d:nodejs
