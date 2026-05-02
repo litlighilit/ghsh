@@ -442,8 +442,11 @@ proc cwdLabel(session: GhShSession): string =
     RepositorySeparator & session.cwd
 
 proc runLs(session: GhShSession, pathArg = EmptyValue) =
-  let entries = listDirectory(session, pathArg)
-  printEntries(entries)
+  try:
+    let entries = listDirectory(session, pathArg)
+    printEntries(entries)
+  except ValueError as exc:
+    error exc.msg
 
 proc runCat(session: GhShSession, pathArg: string) =
   if pathArg.len == 0:

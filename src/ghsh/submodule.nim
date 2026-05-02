@@ -169,6 +169,8 @@ proc listDirectory*(session: GhShSession, userPath = ""): seq[RepoEntry] =
   let payload = requestJson(buildContentsUrl(session, absolutePath), session.token)
 
   if payload.kind != JArray:
+    assert payload.kind == JObject
+    assert payload.hasKey"name"
     raise newException(ValueError, "path is not a directory: /" & absolutePath)
 
   for item in payload:
